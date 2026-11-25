@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APK_DIR: ${{ github.workspace }}/app/build/outputs/apk
+      # secrets 不能直接在 if 中使用，先转到 job 级 env 供步骤判断
+      SIGN_TOKEN: ${{ secrets.TOKEN }}
       # 覆盖项目自带的 -Xmx16g，避免 runner 内存不足
       GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
@@ -44,7 +46,7 @@ jobs:
 
       # 有 TOKEN 时用正式密钥仓库；否则现场生成临时 debug 密钥，保证 fork 也能出包
       - name: 准备签名密钥（正式）
-        if: ${{ secrets.TOKEN != '' }}
+        if: env.SIGN_TOKEN != ''
         uses: actions/checkout@v4
         with:
           repository: pppscn/keystore
@@ -52,7 +54,7 @@ jobs:
           path: keystore
 
       - name: 准备签名密钥（临时 debug）
-        if: ${{ secrets.TOKEN == '' }}
+        if: env.SIGN_TOKEN == ''
         run: |
           mkdir -p keystore
           keytool -genkeypair -v \
