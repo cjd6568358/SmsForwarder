@@ -65,7 +65,7 @@ jobs:
           cat > keystore/keystore.properties <<'EOF'
           keyAlias=androiddebugkey
           keyPassword=android
-          storeFile=debug.jks
+          storeFile=../keystore/debug.jks
           storePassword=android
           EOF
 
