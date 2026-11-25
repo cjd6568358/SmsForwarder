@@ -1,5 +1,7 @@
 package cn.ppps.forwarder.fragment
 
+import cn.ppps.forwarder.BuildConfig
+
 import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
@@ -200,7 +202,7 @@ class SendersFragment : BaseFragment<FragmentSendersBinding?>(),
             CoreAnim.slide,
             R.drawable.icon_socket
         ),
-    )
+    ).filterIndexed { index, _ -> isSenderEntryEnabled(index) }
 
     override fun viewBindingInflate(
         inflater: LayoutInflater,
@@ -336,25 +338,47 @@ class SendersFragment : BaseFragment<FragmentSendersBinding?>(),
         }
     }
 
+
+    // SENDER_FRAGMENT_LIST 与渠道常量顺序一致，按构建期开关过滤入口
+    private fun isSenderEntryEnabled(index: Int): Boolean = when (index) {
+        0 -> BuildConfig.PUSH_CHANNEL_DINGTALK_GROUP_ROBOT
+        1 -> BuildConfig.PUSH_CHANNEL_EMAIL
+        2 -> BuildConfig.PUSH_CHANNEL_BARK
+        3 -> BuildConfig.PUSH_CHANNEL_WEBHOOK
+        4 -> BuildConfig.PUSH_CHANNEL_WEWORK_ROBOT
+        5 -> BuildConfig.PUSH_CHANNEL_WEWORK_AGENT
+        6 -> BuildConfig.PUSH_CHANNEL_SERVERCHAN
+        7 -> BuildConfig.PUSH_CHANNEL_TELEGRAM
+        8 -> BuildConfig.PUSH_CHANNEL_SMS
+        9 -> BuildConfig.PUSH_CHANNEL_FEISHU
+        10 -> BuildConfig.PUSH_CHANNEL_PUSHPLUS
+        11 -> BuildConfig.PUSH_CHANNEL_GOTIFY
+        12 -> BuildConfig.PUSH_CHANNEL_DINGTALK_INNER_ROBOT
+        13 -> BuildConfig.PUSH_CHANNEL_FEISHU_APP
+        14 -> BuildConfig.PUSH_CHANNEL_URL_SCHEME
+        15 -> BuildConfig.PUSH_CHANNEL_SOCKET
+        else -> true
+    }
+
     private fun getFragment(type: Int): Class<out XPageFragment> {
         return when (type) {
-            TYPE_DINGTALK_GROUP_ROBOT -> DingtalkGroupRobotFragment::class.java
-            TYPE_EMAIL -> EmailFragment::class.java
-            TYPE_BARK -> BarkFragment::class.java
-            TYPE_WEBHOOK -> WebhookFragment::class.java
-            TYPE_WEWORK_ROBOT -> WeworkRobotFragment::class.java
-            TYPE_WEWORK_AGENT -> WeworkAgentFragment::class.java
-            TYPE_SERVERCHAN -> ServerchanFragment::class.java
-            TYPE_TELEGRAM -> TelegramFragment::class.java
-            TYPE_SMS -> SmsFragment::class.java
-            TYPE_FEISHU -> FeishuFragment::class.java
-            TYPE_PUSHPLUS -> PushplusFragment::class.java
-            TYPE_GOTIFY -> GotifyFragment::class.java
-            TYPE_DINGTALK_INNER_ROBOT -> DingtalkInnerRobotFragment::class.java
-            TYPE_FEISHU_APP -> FeishuAppFragment::class.java
-            TYPE_URL_SCHEME -> UrlSchemeFragment::class.java
-            TYPE_SOCKET -> SocketFragment::class.java
-            else -> DingtalkGroupRobotFragment::class.java
+            TYPE_DINGTALK_GROUP_ROBOT -> if (BuildConfig.PUSH_CHANNEL_DINGTALK_GROUP_ROBOT) DingtalkGroupRobotFragment::class.java else SendersFragment::class.java
+            TYPE_EMAIL -> if (BuildConfig.PUSH_CHANNEL_EMAIL) EmailFragment::class.java else SendersFragment::class.java
+            TYPE_BARK -> if (BuildConfig.PUSH_CHANNEL_BARK) BarkFragment::class.java else SendersFragment::class.java
+            TYPE_WEBHOOK -> if (BuildConfig.PUSH_CHANNEL_WEBHOOK) WebhookFragment::class.java else SendersFragment::class.java
+            TYPE_WEWORK_ROBOT -> if (BuildConfig.PUSH_CHANNEL_WEWORK_ROBOT) WeworkRobotFragment::class.java else SendersFragment::class.java
+            TYPE_WEWORK_AGENT -> if (BuildConfig.PUSH_CHANNEL_WEWORK_AGENT) WeworkAgentFragment::class.java else SendersFragment::class.java
+            TYPE_SERVERCHAN -> if (BuildConfig.PUSH_CHANNEL_SERVERCHAN) ServerchanFragment::class.java else SendersFragment::class.java
+            TYPE_TELEGRAM -> if (BuildConfig.PUSH_CHANNEL_TELEGRAM) TelegramFragment::class.java else SendersFragment::class.java
+            TYPE_SMS -> if (BuildConfig.PUSH_CHANNEL_SMS) SmsFragment::class.java else SendersFragment::class.java
+            TYPE_FEISHU -> if (BuildConfig.PUSH_CHANNEL_FEISHU) FeishuFragment::class.java else SendersFragment::class.java
+            TYPE_PUSHPLUS -> if (BuildConfig.PUSH_CHANNEL_PUSHPLUS) PushplusFragment::class.java else SendersFragment::class.java
+            TYPE_GOTIFY -> if (BuildConfig.PUSH_CHANNEL_GOTIFY) GotifyFragment::class.java else SendersFragment::class.java
+            TYPE_DINGTALK_INNER_ROBOT -> if (BuildConfig.PUSH_CHANNEL_DINGTALK_INNER_ROBOT) DingtalkInnerRobotFragment::class.java else SendersFragment::class.java
+            TYPE_FEISHU_APP -> if (BuildConfig.PUSH_CHANNEL_FEISHU_APP) FeishuAppFragment::class.java else SendersFragment::class.java
+            TYPE_URL_SCHEME -> if (BuildConfig.PUSH_CHANNEL_URL_SCHEME) UrlSchemeFragment::class.java else SendersFragment::class.java
+            TYPE_SOCKET -> if (BuildConfig.PUSH_CHANNEL_SOCKET) SocketFragment::class.java else SendersFragment::class.java
+            else -> SendersFragment::class.java
         }
     }
 

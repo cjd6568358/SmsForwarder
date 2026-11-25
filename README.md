@@ -67,6 +67,29 @@
 
 --------
 
+## 构建定制（arm64 / 渠道裁剪）
+
+为减小产物体积，构建期支持通过 Gradle 参数裁剪架构与推送渠道：
+
+| 参数 | 说明 | 示例 |
+| --- | --- | --- |
+| `-PabiFilter=arm64-v8a` | 仅构建指定 ABI（逗号分隔），默认构建全部 | `-PabiFilter=arm64-v8a` |
+| `-PpushChannels=webhook,bark` | 仅保留指定推送渠道（逗号分隔），默认全部 | `-PpushChannels=all` / `-PpushChannels=none` |
+
+可用渠道名：`dingtalk_group_robot`、`email`、`bark`、`webhook`、`wework_robot`、`wework_agent`、`serverchan`、`telegram`、`sms`、`feishu`、`pushplus`、`gotify`、`dingtalk_inner_robot`、`feishu_app`、`url_scheme`、`socket`。渠道名不区分大小写，未知名称会直接终止构建，避免误裁剪。
+
+本地构建示例：
+
+```bash
+./gradlew assembleRelease -PabiFilter=arm64-v8a -PpushChannels=webhook,bark
+```
+
+GitHub Actions 中可使用 **Build arm64-v8a** workflow，手动触发时填写需要保留的渠道；该 workflow 会在 Step Summary 中输出 APK 体积构成（DEX / native 库 / 资源）。
+
+> 注意：被裁剪渠道的历史规则仍会保留在数据库中，但转发时会被拦截并记录“未知发送通道”，添加入口也会隐藏。
+
+--------
+
 ## 使用文档【新用户必看！】
 
 > ⚠ GitHub Wiki：https://github.com/pppscn/SmsForwarder/wiki

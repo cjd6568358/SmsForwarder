@@ -25,6 +25,48 @@ ext.enableXaop = gradle.startParameter.taskNames.any { name ->
 }
 println "[XAOP] enable = ${enableXaop}, tasks = ${gradle.startParameter.taskNames}"
 
+/**
+ * ================================
+ * 构建期裁剪参数（CI / 本地通用）
+ *   -PabiFilter=arm64-v8a            仅构建指定 ABI，逗号分隔，默认全部
+ *   -PpushChannels=webhook,bark      仅保留指定推送渠道，逗号分隔，默认全部
+ *   渠道支持特殊值 all / none；未知名称直接报错，避免误裁剪
+ * ================================
+ */
+def allAbiFilters = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
+def abiFilterNames = (project.findProperty('abiFilter')?.toString() ?: '')
+        .split(',').collect { it.trim() }.findAll { it }
+def unknownAbis = abiFilterNames - allAbiFilters
+if (unknownAbis) {
+    throw new GradleException("Unknown ABI: ${unknownAbis}. Available: ${allAbiFilters}")
+}
+def selectedAbis = abiFilterNames ?: allAbiFilters
+
+def allPushChannels = [
+        'dingtalk_group_robot', 'email', 'bark', 'webhook', 'wework_robot',
+        'wework_agent', 'serverchan', 'telegram', 'sms', 'feishu',
+        'pushplus', 'gotify', 'dingtalk_inner_robot', 'feishu_app',
+        'url_scheme', 'socket'
+]
+def pushChannelsRaw = (project.findProperty('pushChannels')?.toString() ?: '').trim()
+def selectedPushChannels
+if (pushChannelsRaw.isEmpty() || pushChannelsRaw.equalsIgnoreCase('all')) {
+    selectedPushChannels = allPushChannels
+} else if (pushChannelsRaw.equalsIgnoreCase('none')) {
+    selectedPushChannels = []
+} else {
+    selectedPushChannels = pushChannelsRaw.split(',').collect { it.trim().toLowerCase() }.findAll { it }
+    def unknownChannels = selectedPushChannels - allPushChannels
+    if (unknownChannels) {
+        throw new GradleException("Unknown push channels: ${unknownChannels}. Available: ${allPushChannels}")
+    }
+}
+println "[CROP] abi=${selectedAbis}, pushChannels=${selectedPushChannels}"
+
+// 邮件渠道独占依赖：裁剪 email 时不进入 APK（仍保留在编译 classpath，保证源码可编译）
+def emailChannelEnabled = selectedPushChannels.contains('email')
+def emailOnlyScope = emailChannelEnabled ? 'implementation' : 'compileOnly'
+
 def keyProps = new Properties()
 def keyPropsFile = rootProject.file('keystore/keystore.properties')
 if (keyPropsFile.exists()) {
@@ -86,9 +128,20 @@ android {
             }
         }
 
-        ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        // 指定 abiFilter 时交给 splits 过滤，避免与 ndk abiFilters 冲突（AGP 不允许同时设置）
+        if (abiFilterNames.isEmpty()) {
+            ndk {
+                abiFilters selectedAbis as String[]
+            }
         }
+
+        // 渠道开关写入 BuildConfig，Kotlin 侧据此裁剪分发与入口；
+        // release 开启 R8 后未启用的分支与渠道类会被自动移除
+        allPushChannels.each { channel ->
+            buildConfigField 'boolean', "PUSH_CHANNEL_${channel.toUpperCase()}",
+                    selectedPushChannels.contains(channel).toString()
+        }
+        buildConfigField 'String', 'PUSH_CHANNELS', '"' + selectedPushChannels.join(',') + '"'
     }
 
     signingConfigs {
@@ -177,8 +230,8 @@ android {
         abi {
             enable true
             reset()
-            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-            universalApk true
+            include selectedAbis as String[]
+            universalApk selectedAbis.size() > 1
         }
     }
     def abiCodes = ['universal': 1, 'armeabi-v7a': 2, 'arm64-v8a': 3, 'x86': 4, 'x86_64': 5]
@@ -373,26 +426,27 @@ dependencies {
     //语种切换框架：https://github.com/getActivity/MultiLanguages
     implementation 'com.github.getActivity:MultiLanguages:10.2'
 
+    // 邮件渠道独占依赖：裁剪 email 时降级为 compileOnly，不进入最终 APK
     // https://jakartaee.github.io/mail-api/Android
-    implementation "com.sun.mail:jakarta.mail:2.0.2"
-    implementation "com.sun.activation:jakarta.activation:2.0.1"
+    add(emailOnlyScope, "com.sun.mail:jakarta.mail:2.0.2")
+    add(emailOnlyScope, "com.sun.activation:jakarta.activation:2.0.1")
 
-    //国密算法SM4 的JAVA实现(基于BC实现)
+    //国密算法SM4 的JAVA实现(基于BC实现)，客户端接口也在用，不能裁剪
     def bouncycastle_version = '1.77'
     //noinspection GradleDependency
     api "org.bouncycastle:bcprov-jdk18on:$bouncycastle_version"
-    //邮件 S/MIME 加密和签名
+    //邮件 S/MIME 加密和签名（渠道独占）
     //implementation "org.spongycastle:bcmail-jdk18on:$bouncycastle_version" //Android下报错
     //noinspection GradleDependency
-    implementation "org.bouncycastle:bcpkix-jdk18on:$bouncycastle_version"
-    //implementation "org.bouncycastle:bctls-jdk18on:$bouncycastle_version"
-    //邮件 PGP 加密和签名
-    //implementation "org.bouncycastle:bcpg-jdk18on:$bouncycastle_version" //Thunderbird无法解密
+    add(emailOnlyScope, "org.bouncycastle:bcpkix-jdk18on:$bouncycastle_version")
+    //add(emailOnlyScope, "org.bouncycastle:bctls-jdk18on:$bouncycastle_version")
+    //邮件 PGP 加密和签名（渠道独占）
+    //add(emailOnlyScope, "org.bouncycastle:bcpg-jdk18on:$bouncycastle_version") //Thunderbird无法解密
     //PGPainless: https://github.com/pgpainless/pgpainless
     //noinspection GradleDependency
-    implementation 'org.pgpainless:pgpainless-core:1.6.7'
+    add(emailOnlyScope, 'org.pgpainless:pgpainless-core:1.6.7')
     //OpenKeychain OpenPGP API：https://github.com/open-keychain/openpgp-api
-    implementation 'org.sufficientlysecure:openpgp-api:10.0'
+    add(emailOnlyScope, 'org.sufficientlysecure:openpgp-api:10.0')
 
     //Android Keep Alive(安卓保活)，Cactus 集成双进程前台服务，JobScheduler，onePix(一像素)，WorkManager，无声音乐
     //https://github.com/gyf-dev/Cactus

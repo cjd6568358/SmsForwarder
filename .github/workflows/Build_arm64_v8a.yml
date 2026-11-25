@@ -1,0 +1,133 @@
+name: Build arm64-v8a
+
+# 专用于 arm64-v8a 单架构构建：支持按需裁剪推送渠道，减小产物体积。
+# 由 push 到 main / 手动触发；CI 构建完成后产物见 Actions Run 的 Artifacts。
+#
+# 渠道名（大小写不敏感，逗号分隔）：
+#   dingtalk_group_robot, email, bark, webhook, wework_robot, wework_agent,
+#   serverchan, telegram, sms, feishu, pushplus, gotify,
+#   dingtalk_inner_robot, feishu_app, url_scheme, socket
+# 特殊值：all（默认，保留全部）、none（不保留任何推送渠道）
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      channels:
+        description: "保留的推送渠道（逗号分隔；all=全部，none=全部裁剪）"
+        required: true
+        type: string
+        default: "all"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      APK_DIR: ${{ github.workspace }}/app/build/outputs/apk
+      # 覆盖项目自带的 -Xmx16g，避免 runner 内存不足
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: 设置 JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '11'
+          java-package: jdk
+
+      # 有 TOKEN 时用正式密钥仓库；否则现场生成临时 debug 密钥，保证 fork 也能出包
+      - name: 准备签名密钥（正式）
+        if: ${{ secrets.TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: pppscn/keystore
+          token: ${{ secrets.TOKEN }}
+          path: keystore
+
+      - name: 准备签名密钥（临时 debug）
+        if: ${{ secrets.TOKEN == '' }}
+        run: |
+          mkdir -p keystore
+          keytool -genkeypair -v \
+            -keystore keystore/debug.jks \
+            -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+          cat > keystore/keystore.properties <<'EOF'
+          keyAlias=androiddebugkey
+          keyPassword=android
+          storeFile=debug.jks
+          storePassword=android
+          EOF
+
+      - name: 构建参数
+        id: params
+        run: |
+          channels="${{ inputs.channels }}"
+          [ -z "$channels" ] && channels="all"
+          echo "channels=${channels}" >> "$GITHUB_OUTPUT"
+          echo "### 构建参数" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 架构: arm64-v8a" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 推送渠道: ${channels}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 构建 arm64-v8a Release APK
+        run: |
+          bash ./gradlew :app:assembleRelease \
+            -PabiFilter=arm64-v8a \
+            -PpushChannels="${{ steps.params.outputs.channels }}" \
+            -PisNeedPackage=true \
+            --no-daemon --console=plain
+
+      - name: 产物体积分析
+        id: size
+        run: |
+          apk=$(find "$APK_DIR" -type f -name 'SmsF_*_arm64-v8a_release.apk' | head -n 1)
+          if [ -z "$apk" ]; then
+            echo "::error::未找到 arm64-v8a Release APK"
+            exit 1
+          fi
+
+          total=$(stat -c%s "$apk")
+          echo "apk_path=$apk" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$(basename "$apk")" >> "$GITHUB_OUTPUT"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 产物体积" >> "$GITHUB_STEP_SUMMARY"
+          echo "**总大小**: $(numfmt --to=iec --suffix=B "$total")" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 组成部分 | 大小 | 文件数 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+          unzip -l "$apk" | awk '
+            NR > 3 && NF >= 4 {
+              size = $1 + 0
+              name = $4
+              if (name ~ /^classes[^/]*\.dex$/) { dex += size; dex_n++ }
+              else if (name ~ /^lib\//) { lib += size; lib_n++ }
+              else if (name ~ /^res\//) { res += size; res_n++ }
+              else if (name ~ /^assets\//) { assets += size; assets_n++ }
+              else if (name == "resources.arsc") { arsc += size; arsc_n++ }
+            }
+            END {
+              printf "| DEX 代码 | %.2f MB | %d |\n", dex/1048576, dex_n
+              printf "| native 库 (lib/) | %.2f MB | %d |\n", lib/1048576, lib_n
+              printf "| 资源 (res/) | %.2f MB | %d |\n", res/1048576, res_n
+              printf "| assets | %.2f MB | %d |\n", assets/1048576, assets_n
+              printf "| resources.arsc | %.2f MB | %d |\n", arsc/1048576, arsc_n
+            }
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传 arm64-v8a 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.size.outputs.apk_name }}
+          path: ${{ steps.size.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 30

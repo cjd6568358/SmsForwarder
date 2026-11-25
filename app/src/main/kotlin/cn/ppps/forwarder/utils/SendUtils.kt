@@ -1,5 +1,7 @@
 package cn.ppps.forwarder.utils
 
+import cn.ppps.forwarder.BuildConfig
+
 import android.annotation.SuppressLint
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -54,6 +56,27 @@ import java.util.Calendar
 object SendUtils {
     private const val TAG = "SendUtils"
 
+    // 构建期裁剪后，未启用的渠道依旧可能存在于历史规则中，这里统一拦截并记日志
+    private fun isPushChannelEnabled(type: Int): Boolean = when (type) {
+        TYPE_DINGTALK_GROUP_ROBOT -> BuildConfig.PUSH_CHANNEL_DINGTALK_GROUP_ROBOT
+        TYPE_EMAIL -> BuildConfig.PUSH_CHANNEL_EMAIL
+        TYPE_BARK -> BuildConfig.PUSH_CHANNEL_BARK
+        TYPE_WEBHOOK -> BuildConfig.PUSH_CHANNEL_WEBHOOK
+        TYPE_WEWORK_ROBOT -> BuildConfig.PUSH_CHANNEL_WEWORK_ROBOT
+        TYPE_WEWORK_AGENT -> BuildConfig.PUSH_CHANNEL_WEWORK_AGENT
+        TYPE_SERVERCHAN -> BuildConfig.PUSH_CHANNEL_SERVERCHAN
+        TYPE_TELEGRAM -> BuildConfig.PUSH_CHANNEL_TELEGRAM
+        TYPE_SMS -> BuildConfig.PUSH_CHANNEL_SMS
+        TYPE_FEISHU -> BuildConfig.PUSH_CHANNEL_FEISHU
+        TYPE_PUSHPLUS -> BuildConfig.PUSH_CHANNEL_PUSHPLUS
+        TYPE_GOTIFY -> BuildConfig.PUSH_CHANNEL_GOTIFY
+        TYPE_DINGTALK_INNER_ROBOT -> BuildConfig.PUSH_CHANNEL_DINGTALK_INNER_ROBOT
+        TYPE_FEISHU_APP -> BuildConfig.PUSH_CHANNEL_FEISHU_APP
+        TYPE_URL_SCHEME -> BuildConfig.PUSH_CHANNEL_URL_SCHEME
+        TYPE_SOCKET -> BuildConfig.PUSH_CHANNEL_SOCKET
+        else -> true
+    }
+
     //重新匹配规则并发送消息
     fun rematchSendMsg(item: MsgAndLogs) {
         val msgInfo = MsgInfo(item.msg.type, item.msg.from, item.msg.content, item.msg.time, item.msg.simInfo, item.msg.simSlot, item.msg.subId)
@@ -92,6 +115,12 @@ object SendUtils {
     fun sendMsgSender(msgInfo: MsgInfo, rule: Rule, senderIndex: Int = 0, logId: Long = 0L, msgId: Long = 0L) {
         try {
             val sender = rule.senderList[senderIndex]
+            if (!isPushChannelEnabled(sender.type)) {
+                Log.d(TAG, "push channel ${sender.type} is cropped out in this build")
+                updateLogs(logId, 0, getString(R.string.unknown_sender))
+                senderLogic(0, msgInfo, rule, senderIndex, msgId)
+                return
+            }
             if (sender.status != 1) {
                 Log.d(TAG, "sender = $sender is disabled")
                 updateLogs(logId, 0, getString(R.string.sender_disabled))
@@ -118,83 +147,115 @@ object SendUtils {
 
             when (sender.type) {
                 TYPE_DINGTALK_GROUP_ROBOT -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, DingtalkGroupRobotSetting::class.java)
-                    DingtalkGroupRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_DINGTALK_GROUP_ROBOT) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, DingtalkGroupRobotSetting::class.java)
+                        DingtalkGroupRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_EMAIL -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, EmailSetting::class.java)
-                    EmailUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_EMAIL) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, EmailSetting::class.java)
+                        EmailUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_BARK -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, BarkSetting::class.java)
-                    BarkUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_BARK) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, BarkSetting::class.java)
+                        BarkUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_WEBHOOK -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, WebhookSetting::class.java)
-                    WebhookUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_WEBHOOK) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, WebhookSetting::class.java)
+                        WebhookUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_WEWORK_ROBOT -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, WeworkRobotSetting::class.java)
-                    WeworkRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_WEWORK_ROBOT) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, WeworkRobotSetting::class.java)
+                        WeworkRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_WEWORK_AGENT -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, WeworkAgentSetting::class.java)
-                    WeworkAgentUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_WEWORK_AGENT) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, WeworkAgentSetting::class.java)
+                        WeworkAgentUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_SERVERCHAN -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, ServerchanSetting::class.java)
-                    ServerchanUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_SERVERCHAN) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, ServerchanSetting::class.java)
+                        ServerchanUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_TELEGRAM -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, TelegramSetting::class.java)
-                    TelegramUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_TELEGRAM) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, TelegramSetting::class.java)
+                        TelegramUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_SMS -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, SmsSetting::class.java)
-                    SmsUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_SMS) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, SmsSetting::class.java)
+                        SmsUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_FEISHU -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, FeishuSetting::class.java)
-                    FeishuUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_FEISHU) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, FeishuSetting::class.java)
+                        FeishuUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_PUSHPLUS -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, PushplusSetting::class.java)
-                    PushplusUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_PUSHPLUS) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, PushplusSetting::class.java)
+                        PushplusUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_GOTIFY -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, GotifySetting::class.java)
-                    GotifyUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_GOTIFY) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, GotifySetting::class.java)
+                        GotifyUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_DINGTALK_INNER_ROBOT -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, DingtalkInnerRobotSetting::class.java)
-                    DingtalkInnerRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_DINGTALK_INNER_ROBOT) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, DingtalkInnerRobotSetting::class.java)
+                        DingtalkInnerRobotUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_FEISHU_APP -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, FeishuAppSetting::class.java)
-                    FeishuAppUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_FEISHU_APP) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, FeishuAppSetting::class.java)
+                        FeishuAppUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_URL_SCHEME -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, UrlSchemeSetting::class.java)
-                    UrlSchemeUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_URL_SCHEME) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, UrlSchemeSetting::class.java)
+                        UrlSchemeUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 TYPE_SOCKET -> {
-                    val settingVo = Gson().fromJson(sender.jsonSetting, SocketSetting::class.java)
-                    SocketUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    if (BuildConfig.PUSH_CHANNEL_SOCKET) {
+                        val settingVo = Gson().fromJson(sender.jsonSetting, SocketSetting::class.java)
+                        SocketUtils.sendMsg(settingVo, msgInfo, rule, senderIndex, logId, msgId)
+                    }
                 }
 
                 else -> {

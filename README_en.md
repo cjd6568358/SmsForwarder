@@ -62,6 +62,25 @@ See more screenshots：https://github.com/pppscn/SmsForwarder/wiki
 
 > ⚠ Internet storage: https://wws.lanzoui.com/b025yl86h, access password: `pppscn`
 
+## Build customization (arm64 / channel cropping)
+
+Build-time Gradle properties can shrink the artifact by ABI and push channel:
+
+| Property | Description | Example |
+| --- | --- | --- |
+| `-PabiFilter=arm64-v8a` | Comma-separated ABI list, default all | `-PabiFilter=arm64-v8a` |
+| `-PpushChannels=webhook,bark` | Comma-separated channels to keep, default all | `-PpushChannels=all` / `-PpushChannels=none` |
+
+Available channels: `dingtalk_group_robot`, `email`, `bark`, `webhook`, `wework_robot`, `wework_agent`, `serverchan`, `telegram`, `sms`, `feishu`, `pushplus`, `gotify`, `dingtalk_inner_robot`, `feishu_app`, `url_scheme`, `socket`. Names are case-insensitive; unknown names fail the build.
+
+```bash
+./gradlew assembleRelease -PabiFilter=arm64-v8a -PpushChannels=webhook,bark
+```
+
+The **Build arm64-v8a** GitHub Actions workflow accepts the channel list on manual dispatch and reports the APK size breakdown in the step summary.
+
+> Note: rules using cropped channels stay in the database, but forwarding is blocked with an "unknown sender" log and the corresponding add-channel entry is hidden.
+
 ## Manual
 
 > ⚠ GitHub: https://github.com/pppscn/SmsForwarder/wiki
